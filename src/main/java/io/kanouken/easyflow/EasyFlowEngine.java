@@ -1,25 +1,41 @@
 package io.kanouken.easyflow;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
+import javax.persistence.EntityManager;
+import javax.persistence.Tuple;
 import javax.transaction.Transactional;
 
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.mvel2.MVEL;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import io.kanouken.easyflow.JsonFlowReader.JsonFlow;
 import io.kanouken.easyflow.JsonFlowReader.JsonFlowNode;
 import io.kanouken.easyflow.model.EasyFlowInstance;
 import io.kanouken.easyflow.model.EasyFlowTask;
+import io.kanouken.easyflow.model.IEasyFlowBusinessService;
+import io.kanouken.easyflow.model.IEasyFlowEntity;
+import io.kanouken.easyflow.model.dto.EasyFlowTaskListDto;
 import io.kanouken.easyflow.repository.EasyFlowInstanceRepository;
 import io.kanouken.easyflow.repository.EasyFlowTaskRepository;
+import io.kanouken.easyflow.user.IEasyFlowUser;
 
 @Component
 public class EasyFlowEngine {
+
+	@Autowired
+	private EntityManager entityManager;
+
+	@Autowired
+	IEasyFlowUser user;
 
 	public static final String EF_RESULT = "complete_result";
 
@@ -39,23 +55,25 @@ public class EasyFlowEngine {
 	 * @return
 	 */
 	@Transactional
-	public EasyFlowInstance start(List<JsonFlowNode> flow, EasyFlowContext context) {
+	public EasyFlowInstance start(JsonFlow flow, EasyFlowContext context, String businessKey) {
 		EasyFlowInstance instance = new EasyFlowInstance();
 		instance.setFlow(flow);
 		instance.setCreateTime(new Date());
 		instance.setUpdateTime(new Date());
 		instance.setIsDone(Byte.valueOf("0"));
-
-		// skip start node
-		String nextNodeName = flow.get(0).getNextNode();
+		instance.setBusinesskey(businessKey);
+		instance.setCreateBy(user.getCurrentUsername());
+		List<JsonFlowNode> nodes = flow.getNodes();
+		// skip first node
+		String nextNodeName = nodes.get(1).getNextNode();
 		JsonFlowNode nextNode = this.filterNode(flow, nextNodeName);
 		String type = nextNode.getType();
 		Integer assignment = null;
 		if (type.equals("gateway")) {
-			// this.gatewayChoose(instance,nextNode);
+			// FIXME first node must not be the gateway
 		} else {
-			List<Integer> assignmentIds = this.evalAssignments(nextNode.getAssignments(), context.getFacts());
-			assignment = assignmentIds.get(0);
+			Integer assignmentIds = this.evalAssignments(nextNode.getAssignments(), context.getFacts());
+			assignment = assignmentIds;
 		}
 
 		instance.setCurrentNode(nextNode.getName());
@@ -70,6 +88,7 @@ public class EasyFlowEngine {
 		task.setIsDone(Byte.valueOf("0"));
 		task.setCreateTime(new Date());
 		task.setNodeName(nextNode.getName());
+		task.setNodeDescription(nextNode.getDescription());
 		task.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
 		this.taskRepository.save(task);
 
@@ -77,8 +96,8 @@ public class EasyFlowEngine {
 	}
 
 	/**
-	 * 完成任务
-	 * 使用gateway 来解决 驳回的场景 ，通过流程变量判断去掉上一个环节
+	 * 完成任务 使用gateway 来解决 驳回的场景 ，通过流程变量判断去掉上一个环节
+	 * 
 	 * @param task
 	 */
 	public EasyFlowInstance completeTask(String taskId, EasyFlowContext context) {
@@ -100,12 +119,12 @@ public class EasyFlowEngine {
 			return instance;
 		} else {
 			if (nextNode.getType().equals("gateway")) {
-				//根据网关选取下一个节点
+				// 根据网关选取下一个节点
 				nextNode = this.gatewayChoose(instance, context, nextNode);
 			}
 			// task
-			List<Integer> assignmentIds = this.evalAssignments(nextNode.getAssignments(), context.getFacts());
-			assignment = assignmentIds.get(0);
+			Integer assignmentIds = this.evalAssignments(nextNode.getAssignments(), context.getFacts());
+			assignment = assignmentIds;
 		}
 		// 不支持签收！！！！！
 		task.setId(null);
@@ -123,9 +142,10 @@ public class EasyFlowEngine {
 		return instance;
 	}
 
-	private JsonFlowNode filterNode(List<JsonFlowNode> flows, String nodeName) {
+	private JsonFlowNode filterNode(JsonFlow flows, String nodeName) {
 
-		Optional<JsonFlowNode> findFirst = flows.stream().filter(f -> f.getName().equals(nodeName)).findFirst();
+		Optional<JsonFlowNode> findFirst = flows.getNodes().stream().filter(f -> f.getName().equals(nodeName))
+				.findFirst();
 
 		if (findFirst.isPresent()) {
 			return findFirst.get();
@@ -135,15 +155,13 @@ public class EasyFlowEngine {
 	}
 
 	private Boolean evalCondition(String expression, Map<String, Object> context) {
-		// We know this expression should return a boolean.
 		Boolean result = (Boolean) MVEL.eval(expression, context);
 		return result;
 	}
 
-	private List<Integer> evalAssignments(String expression, Map<String, Object> context) {
-		// We know this expression should return a boolean.
-		List<Integer> assignments = (List<Integer>) MVEL.eval(expression, context);
-		return assignments;
+	private Integer evalAssignments(String expression, Map<String, Object> context) {
+		Integer eval = MVEL.eval(expression, context, Integer.class);
+		return eval;
 	}
 
 	/**
@@ -157,10 +175,7 @@ public class EasyFlowEngine {
 	 */
 	private JsonFlowNode gatewayChoose(EasyFlowInstance instance, EasyFlowContext context, JsonFlowNode node) {
 		List<Map<String, Object>> gatewayConditions = node.getGatewayConditions();
-		// {
-		// "condition": "days>3",
-		// "nextNode": "node3"
-		// }
+
 		JsonFlowNode nextNode = null;
 		for (Map<String, Object> condition : gatewayConditions) {
 
@@ -174,6 +189,74 @@ public class EasyFlowEngine {
 			throw new RuntimeException("gateway exception");
 		}
 		return nextNode;
+	}
+
+	/**
+	 * 根据办理人 + 流程key 查询办理事项 包含 已办 和待办
+	 * 
+	 * @param assignment
+	 *            办理人
+	 * @param flowKey
+	 *            流程key
+	 * @return
+	 */
+	public List<EasyFlowTaskListDto> queryTask(Integer assignment, String flowKey) {
+		List<EasyFlowTaskListDto> result = new ArrayList<EasyFlowTaskListDto>();
+		// 根据流程key 查询流程实例
+		List<EasyFlowInstance> instances = this.instanceRepository.findByFlowKey(flowKey);
+		if (CollectionUtils.isNotEmpty(instances)) {
+
+		}
+		List<String> instanceIds = instances.stream().map(EasyFlowInstance::getId).collect(Collectors.toList());
+
+		List<Tuple> tasksTuple = this.taskRepository.findByAssignmentAndInstanceIdInOrderByCreateTimeDesc(assignment,
+				instanceIds);
+
+		if (CollectionUtils.isNotEmpty(tasksTuple)) {
+			EasyFlowTaskListDto taskListDto = null;
+			for (Tuple tuple : tasksTuple) {
+				taskListDto = new EasyFlowTaskListDto();
+				taskListDto.setId(tuple.get(0, String.class));
+				taskListDto.setInstanceId(tuple.get(1, String.class));
+				taskListDto.setIsDone(tuple.get(2, Byte.class));
+				taskListDto.setNodeName(tuple.get(3, String.class));
+				taskListDto.setNodeDescription(tuple.get(4, String.class));
+				taskListDto.setFlowKey(tuple.get(5, String.class));
+				taskListDto.setFlowName(tuple.get(6, String.class));
+				taskListDto.setFormUrl(tuple.get(7, String.class));
+				taskListDto.setPublisher(tuple.get(8, String.class));
+				taskListDto.setCreateTime(tuple.get(9, Date.class));
+				result.add(taskListDto);
+			}
+		}
+		return result;
+
+	}
+
+	/**
+	 * 根据流程实ids 例查询 实例列表
+	 * 
+	 * @param instanceIds
+	 * @return
+	 */
+	public List<EasyFlowInstance> queryFlowInstance(List<String> instanceIds) {
+		return this.instanceRepository.findByIdIn(instanceIds);
+	}
+
+	/**
+	 * 查询流程实例
+	 * 
+	 * @param id
+	 * @return
+	 */
+	public Optional<EasyFlowInstance> queryInstance(String id) {
+		return this.instanceRepository.findById(id);
+	}
+
+	// 泛型 直接返回业务对象
+	public <T> List<T> queryInstance(String nodeName, IEasyFlowBusinessService<T> service) {
+		List<EasyFlowInstance> instances = this.instanceRepository.findByNodeName(nodeName);
+		return service.transformToBusiness(instances);
 
 	}
 }

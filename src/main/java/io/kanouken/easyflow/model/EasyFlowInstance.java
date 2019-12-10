@@ -1,7 +1,6 @@
 package io.kanouken.easyflow.model;
 
 import java.util.Date;
-import java.util.List;
 
 import javax.persistence.Column;
 import javax.persistence.Convert;
@@ -11,7 +10,7 @@ import javax.persistence.Id;
 
 import org.hibernate.annotations.GenericGenerator;
 
-import io.kanouken.easyflow.JsonFlowReader.JsonFlowNode;
+import io.kanouken.easyflow.JsonFlowReader.JsonFlow;
 import io.kanouken.easyflow.config.JpaConverterFlowNodeList;
 
 @Entity(name = "ef_instance")
@@ -23,8 +22,12 @@ public class EasyFlowInstance {
 	private String id;
 	@Convert(converter = JpaConverterFlowNodeList.class)
 	@Column(columnDefinition = "json")
-	private List<JsonFlowNode> flow;
+	private JsonFlow flow;
 	private Date createTime;
+
+	private String createBy;
+
+	private String updateBy;
 
 	private Date updateTime;
 
@@ -35,45 +38,32 @@ public class EasyFlowInstance {
 	private String currentNodeDescription;
 
 	/**
-	 * 表单路径
-	 */
-	private String formUrl;
-	
-	/**
 	 * 业务编号
 	 */
-	private String bussinesskey;
-	
-	/**
-	 * 流程key
-	 */
-	private String flowKey; 
-	
-	
-	
+	private String businesskey;
 
-	public String getBussinesskey() {
-		return bussinesskey;
+	public String getCreateBy() {
+		return createBy;
 	}
 
-	public void setBussinesskey(String bussinesskey) {
-		this.bussinesskey = bussinesskey;
+	public void setCreateBy(String createBy) {
+		this.createBy = createBy;
 	}
 
-	public String getFlowKey() {
-		return flowKey;
+	public String getUpdateBy() {
+		return updateBy;
 	}
 
-	public void setFlowKey(String flowKey) {
-		this.flowKey = flowKey;
+	public void setUpdateBy(String updateBy) {
+		this.updateBy = updateBy;
 	}
 
-	public String getFormUrl() {
-		return formUrl;
+	public String getBusinesskey() {
+		return businesskey;
 	}
 
-	public void setFormUrl(String formUrl) {
-		this.formUrl = formUrl;
+	public void setBusinesskey(String businesskey) {
+		this.businesskey = businesskey;
 	}
 
 	public Date getUpdateTime() {
@@ -116,11 +106,11 @@ public class EasyFlowInstance {
 		this.id = id;
 	}
 
-	public List<JsonFlowNode> getFlow() {
+	public JsonFlow getFlow() {
 		return flow;
 	}
 
-	public void setFlow(List<JsonFlowNode> flow) {
+	public void setFlow(JsonFlow flow) {
 		this.flow = flow;
 	}
 

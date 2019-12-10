@@ -8,11 +8,13 @@ import javax.persistence.Convert;
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
+import javax.persistence.Transient;
 
 import org.hibernate.annotations.GenericGenerator;
 
 import io.kanouken.easyflow.config.JpaConverterMap;
-@Entity(name="ef_task")
+
+@Entity(name = "ef_task")
 public class EasyFlowTask {
 
 	@Id
@@ -33,6 +35,16 @@ public class EasyFlowTask {
 	 */
 	private String nodeName;
 
+	@Transient
+	private String flowKey;
+	@Transient
+	private String flowName;
+
+	/**
+	 * 节点描述
+	 */
+	private String nodeDescription;
+
 	/**
 	 * 执行人 id
 	 */
@@ -45,12 +57,36 @@ public class EasyFlowTask {
 
 	private Byte isDone;
 
+	public String getFlowKey() {
+		return flowKey;
+	}
+
+	public void setFlowKey(String flowKey) {
+		this.flowKey = flowKey;
+	}
+
+	public String getFlowName() {
+		return flowName;
+	}
+
+	public void setFlowName(String flowName) {
+		this.flowName = flowName;
+	}
+
 	/**
 	 * 变量
 	 */
 	@Convert(converter = JpaConverterMap.class)
 	@Column(columnDefinition = "json")
 	private Map<String, Object> vars;
+
+	public String getNodeDescription() {
+		return nodeDescription;
+	}
+
+	public void setNodeDescription(String nodeDescription) {
+		this.nodeDescription = nodeDescription;
+	}
 
 	public Map<String, Object> getVars() {
 		return vars;

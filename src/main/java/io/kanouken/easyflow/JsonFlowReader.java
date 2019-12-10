@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class JsonFlowReader {
@@ -16,17 +15,69 @@ public class JsonFlowReader {
 		this.mapper = mapper;
 	}
 
-	public JavaType getCollectionType(Class<?> collectionClass, Class<?>... elementClasses) {
-		return this.mapper.getTypeFactory().constructParametricType(collectionClass, elementClasses);
-	}
+	// public JavaType getCollectionType(Class<?> collectionClass, Class<?>...
+	// elementClasses) {
+	// return
+	// this.mapper.getTypeFactory().constructParametricType(collectionClass,
+	// elementClasses);
+	// }
 
-	public List<JsonFlowNode> read(FileReader reader) {
+	public JsonFlow read(FileReader reader) {
 		try {
-			JavaType javaType = getCollectionType(List.class, JsonFlowNode.class);
-			return mapper.readValue(reader, javaType);
+			return mapper.readValue(reader, JsonFlow.class);
 		} catch (IOException ex) {
 			ex.printStackTrace();
 			return null;
+		}
+	}
+
+	public static class JsonFlow {
+
+		private String name;
+		private String key;
+		private String description;
+		private String formUrl;
+
+		public String getFormUrl() {
+			return formUrl;
+		}
+
+		public void setFormUrl(String formUrl) {
+			this.formUrl = formUrl;
+		}
+
+		private List<JsonFlowNode> nodes;
+
+		public String getName() {
+			return name;
+		}
+
+		public void setName(String name) {
+			this.name = name;
+		}
+
+		public String getKey() {
+			return key;
+		}
+
+		public void setKey(String key) {
+			this.key = key;
+		}
+
+		public String getDescription() {
+			return description;
+		}
+
+		public void setDescription(String description) {
+			this.description = description;
+		}
+
+		public List<JsonFlowNode> getNodes() {
+			return nodes;
+		}
+
+		public void setNodes(List<JsonFlowNode> nodes) {
+			this.nodes = nodes;
 		}
 	}
 

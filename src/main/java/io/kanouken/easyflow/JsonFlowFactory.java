@@ -1,9 +1,8 @@
 package io.kanouken.easyflow;
 
 import java.io.FileReader;
-import java.util.List;
 
-import io.kanouken.easyflow.JsonFlowReader.JsonFlowNode;
+import io.kanouken.easyflow.JsonFlowReader.JsonFlow;
 
 public class JsonFlowFactory {
 
@@ -13,7 +12,7 @@ public class JsonFlowFactory {
 		this.reader = reader;
 	}
 
-	public List<JsonFlowNode> createFlow(FileReader reader) {
+	public JsonFlow createFlow(FileReader reader) {
 		return this.reader.read(reader);
 	}
 }

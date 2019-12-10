@@ -1,11 +1,8 @@
 package io.kanouken.easyflow.config;
 
 import java.io.IOException;
-import java.util.List;
 
 import javax.persistence.AttributeConverter;
-
-import org.apache.commons.collections4.CollectionUtils;
 
 import com.fasterxml.jackson.core.JsonGenerator.Feature;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -13,9 +10,9 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.kanouken.easyflow.JsonFlowReader.JsonFlowNode;
+import io.kanouken.easyflow.JsonFlowReader.JsonFlow;
 
-public class JpaConverterFlowNodeList implements AttributeConverter<List<JsonFlowNode>, String> {
+public class JpaConverterFlowNodeList implements AttributeConverter<JsonFlow, String> {
 
 	public static ObjectMapper om = new ObjectMapper();
 
@@ -27,13 +24,12 @@ public class JpaConverterFlowNodeList implements AttributeConverter<List<JsonFlo
 		om.configure(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT, true);
 	}
 
-	public List<JsonFlowNode> convertToEntityAttribute(String dbData) {
+	public JsonFlow convertToEntityAttribute(String dbData) {
 		try {
 			if (dbData == null) {
 				return null;
 			}
-			JavaType javaType = getCollectionType(List.class, JsonFlowNode.class);
-			return om.readValue(dbData, javaType);
+			return om.readValue(dbData, JsonFlow.class);
 		} catch (IOException ex) {
 			ex.printStackTrace();
 			return null;
@@ -44,9 +40,9 @@ public class JpaConverterFlowNodeList implements AttributeConverter<List<JsonFlo
 		return om.getTypeFactory().constructParametricType(collectionClass, elementClasses);
 	}
 
-	public String convertToDatabaseColumn(List<JsonFlowNode> attribute) {
+	public String convertToDatabaseColumn(JsonFlow attribute) {
 		try {
-			if (CollectionUtils.isNotEmpty(attribute)) {
+			if (null != attribute) {
 				return om.writeValueAsString(attribute);
 			} else {
 				return null;

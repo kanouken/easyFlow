@@ -3,7 +3,6 @@ package io.kanouken.easyflow;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import org.mvel2.MVEL;
@@ -12,10 +11,15 @@ import com.fasterxml.jackson.core.JsonGenerator.Feature;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.kanouken.easyflow.JsonFlowReader.JsonFlowNode;
+import io.kanouken.easyflow.JsonFlowReader.JsonFlow;
 import io.kanouken.easyflow.model.EasyFlowInstance;
-import io.kanouken.easyflow.model.EasyFlowTask;
 
+/**
+ * for test
+ * 
+ * @author Administrator
+ *
+ */
 public class Luancher {
 	public static void main1(String[] args) throws FileNotFoundException {
 
@@ -32,7 +36,7 @@ public class Luancher {
 		context.put("userService", null);
 		JsonFlowReader reader = new JsonFlowReader(om);
 		JsonFlowFactory factory = new JsonFlowFactory(reader);
-		List<JsonFlowNode> flow = factory.createFlow(new FileReader("src/main/java/io/kanouken/easyflow/myFlow.json"));
+		JsonFlow flow = factory.createFlow(new FileReader("src/main/java/io/kanouken/easyflow/myFlow.json"));
 		EasyFlowEngine engine = new EasyFlowEngine();
 
 		// auto skip start node
@@ -46,7 +50,6 @@ public class Luancher {
 
 		Map vars = new HashMap();
 		vars.put("foobar", new Integer(100));
-		vars.put("userService", new UserService());
 		// We know this expression should return a boolean.
 		Boolean result = (Boolean) MVEL.eval(expression, vars);
 
