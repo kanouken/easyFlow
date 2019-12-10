@@ -29,3 +29,37 @@ an simple java flow framework
 		List<JsonFlowNode> flow = factory.createFlow(new FileReader("src/main/resources/myFlow.json"));
 		EasyFlowInstance start = engine.start(flow, context);
 	}
+
+{
+	"name": "请假申请",
+	"description": "请假流程",
+	"key": "myFirstFlow",
+	"nodes": 
+	[
+		{
+			"name": "start",
+			"type": "start",
+			"nextNode": "node1"
+		},
+
+		{
+			"name": "node1",
+			"description": "提交申请",
+			"type": "task",
+			"nextNode": "node2"
+		},
+
+		{
+			"name": "node2",
+			"description": "领导审批",
+			"type": "task",
+			"assignments": "inputUser",
+			"nextNode": "node3"
+		},
+
+		{
+			"name": "node3",
+			"type": "end"
+		}
+	]
+}
