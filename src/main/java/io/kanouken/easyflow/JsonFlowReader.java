@@ -2,6 +2,7 @@ package io.kanouken.easyflow;
 
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 
@@ -22,9 +23,9 @@ public class JsonFlowReader {
 	// elementClasses);
 	// }
 
-	public JsonFlow read(FileReader reader) {
+	public JsonFlow read(InputStream is) {
 		try {
-			return mapper.readValue(reader, JsonFlow.class);
+			return mapper.readValue(is, JsonFlow.class);
 		} catch (IOException ex) {
 			ex.printStackTrace();
 			return null;

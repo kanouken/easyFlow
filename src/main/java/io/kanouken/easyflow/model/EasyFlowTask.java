@@ -8,7 +8,6 @@ import javax.persistence.Convert;
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
-import javax.persistence.Transient;
 
 import org.hibernate.annotations.GenericGenerator;
 
@@ -35,11 +34,6 @@ public class EasyFlowTask {
 	 */
 	private String nodeName;
 
-	@Transient
-	private String flowKey;
-	@Transient
-	private String flowName;
-
 	/**
 	 * 节点描述
 	 */
@@ -56,22 +50,10 @@ public class EasyFlowTask {
 	private String completeResult;
 
 	private Byte isDone;
-
-	public String getFlowKey() {
-		return flowKey;
-	}
-
-	public void setFlowKey(String flowKey) {
-		this.flowKey = flowKey;
-	}
-
-	public String getFlowName() {
-		return flowName;
-	}
-
-	public void setFlowName(String flowName) {
-		this.flowName = flowName;
-	}
+	/**
+	 * 办结状态
+	 */
+	private Byte approvalStatus;
 
 	/**
 	 * 变量
@@ -82,6 +64,14 @@ public class EasyFlowTask {
 
 	public String getNodeDescription() {
 		return nodeDescription;
+	}
+
+	public Byte getApprovalStatus() {
+		return approvalStatus;
+	}
+
+	public void setApprovalStatus(Byte approvalStatus) {
+		this.approvalStatus = approvalStatus;
 	}
 
 	public void setNodeDescription(String nodeDescription) {

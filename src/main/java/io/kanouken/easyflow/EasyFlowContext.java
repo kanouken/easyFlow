@@ -25,6 +25,10 @@ public class EasyFlowContext {
 		this.facts.put(EasyFlowEngine.EF_RESULT, result);
 	}
 
+	public void putApprovalStatus(Byte status) {
+		this.facts.put(EasyFlowEngine.EF_APPROVAL_RESULT, status);
+	}
+
 	public void putVars(Map<String, Object> vars) {
 		this.facts.put(EasyFlowEngine.EF_VARS, vars);
 	}

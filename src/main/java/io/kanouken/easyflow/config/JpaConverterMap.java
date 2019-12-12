@@ -5,7 +5,7 @@ import java.util.Map;
 
 import javax.persistence.AttributeConverter;
 
-import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.collections.MapUtils;
 
 import com.fasterxml.jackson.core.JsonGenerator.Feature;
 import com.fasterxml.jackson.core.JsonProcessingException;

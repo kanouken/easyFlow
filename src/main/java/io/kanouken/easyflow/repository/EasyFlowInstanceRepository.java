@@ -16,6 +16,6 @@ public interface EasyFlowInstanceRepository extends CrudRepository<EasyFlowInsta
 
 	List<EasyFlowInstance> findByIdIn(List<String> instanceIds);
 
-	List<EasyFlowInstance> findByNodeName(String nodeName);
+	// List<EasyFlowInstance> findByNodeName(String nodeName);
 
 }
