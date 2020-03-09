@@ -29,6 +29,8 @@ public class EasyFlowTask {
 
 	private Date updateTime;
 
+	private Byte isDelete = Byte.valueOf("0");
+
 	/**
 	 * 节点名称
 	 */
@@ -61,6 +63,14 @@ public class EasyFlowTask {
 	@Convert(converter = JpaConverterMap.class)
 	@Column(columnDefinition = "json")
 	private Map<String, Object> vars;
+
+	public Byte getIsDelete() {
+		return isDelete;
+	}
+
+	public void setIsDelete(Byte isDelete) {
+		this.isDelete = isDelete;
+	}
 
 	public String getNodeDescription() {
 		return nodeDescription;

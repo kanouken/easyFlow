@@ -7,7 +7,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import javax.persistence.EntityManager;
 import javax.persistence.Tuple;
 
 import org.apache.commons.collections.CollectionUtils;
@@ -35,8 +34,14 @@ public class EasyFlowEngine {
 	IEasyFlowUser user;
 
 	public static final String EF_RESULT = "complete_result";
-	public static final String EF_APPROVAL_RESULT = "approval_result";
+	public static final String EF_APPROVAL_RESULT = "approvalStatus";
 	public static final String EF_VARS = "vars";
+
+	public static final String NODE_TYPE_END = "end";
+
+	public static final Byte STATUS_RUNNING = Byte.valueOf("1");
+
+	public static final Byte STATUS_ENDING = Byte.valueOf("2");
 
 	@Autowired
 	EasyFlowInstanceRepository instanceRepository;
@@ -57,10 +62,13 @@ public class EasyFlowEngine {
 		instance.setFlow(flow);
 		instance.setCreateTime(new Date());
 		instance.setUpdateTime(new Date());
-		instance.setIsDone(Byte.valueOf("0"));
+		instance.setStatus(STATUS_RUNNING);
 		instance.setBusinesskey(businessKey);
 		instance.setCreateBy(user.getCurrentUsername());
+		instance.setCreateId(user.getCurrentUserid());
 		List<JsonFlowNode> nodes = flow.getNodes();
+
+		JsonFlowNode autoCompleteNode = nodes.get(1);
 		// skip first node
 		String nextNodeName = nodes.get(1).getNextNode();
 		JsonFlowNode nextNode = this.filterNode(flow, nextNodeName);
@@ -77,6 +85,18 @@ public class EasyFlowEngine {
 		instance.setCurrentNodeDescription(nextNode.getDescription());
 		this.instanceRepository.save(instance);
 
+		// auto complete first task
+		EasyFlowTask firstTask = new EasyFlowTask();
+		firstTask.setAssignment(Integer.valueOf(user.getCurrentUserid()));
+		firstTask.setInstanceId(instance.getId());
+		firstTask.setIsDone(Byte.valueOf("1"));// 已完成
+		firstTask.setApprovalStatus(Byte.valueOf("1"));
+		firstTask.setCreateTime(new Date());
+		firstTask.setUpdateTime(new Date());
+		firstTask.setNodeName(autoCompleteNode.getName());
+		firstTask.setNodeDescription(autoCompleteNode.getDescription());
+		this.taskRepository.save(firstTask);
+
 		// createTask
 		// 不支持签收
 		EasyFlowTask task = new EasyFlowTask();
@@ -84,6 +104,7 @@ public class EasyFlowEngine {
 		task.setInstanceId(instance.getId());
 		task.setIsDone(Byte.valueOf("0"));
 		task.setCreateTime(new Date());
+		task.setUpdateTime(new Date());
 		task.setNodeName(nextNode.getName());
 		task.setNodeDescription(nextNode.getDescription());
 		task.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
@@ -99,8 +120,11 @@ public class EasyFlowEngine {
 	 */
 	@Transactional(rollbackFor = { Exception.class }, propagation = Propagation.REQUIRED)
 	public EasyFlowInstance completeTask(String taskId, EasyFlowContext context) {
+		context.put("flowUser", this.user);
+
 		EasyFlowTask task = this.taskRepository.findOne(taskId);
 		EasyFlowInstance instance = this.instanceRepository.findOne(task.getInstanceId());
+		context.put("publisher", instance.getCreateId());
 		JsonFlowNode currentNode = this.filterNode(instance.getFlow(), task.getNodeName());
 		JsonFlowNode nextNode = this.filterNode(instance.getFlow(), currentNode.getNextNode());
 		task.setIsDone(Byte.valueOf("1"));
@@ -110,22 +134,26 @@ public class EasyFlowEngine {
 		// save currentTask
 		this.taskRepository.save(task);
 		Integer assignment = null;
+
+		// next node
+		if (nextNode.getType().equals("gateway")) {
+			// 根据网关选取下一个节点
+			nextNode = this.gatewayChoose(instance, context, nextNode);
+		}
+
 		if (nextNode.getType().equals("end")) {
 			instance.setUpdateTime(new Date());
-			instance.setIsDone(Byte.valueOf("1"));
+			instance.setStatus(STATUS_ENDING);
 			instance.setCurrentNode(nextNode.getName());
 			instance.setCurrentNodeDescription(nextNode.getDescription());
 			this.instanceRepository.save(instance);
 			// end
 			return instance;
 		} else {
-			if (nextNode.getType().equals("gateway")) {
-				// 根据网关选取下一个节点
-				nextNode = this.gatewayChoose(instance, context, nextNode);
-			}
 			// task
 			Integer assignmentIds = this.evalAssignments(nextNode.getAssignments(), context.getFacts());
 			assignment = assignmentIds;
+
 		}
 		// 不支持签收！！！！！
 
@@ -134,6 +162,7 @@ public class EasyFlowEngine {
 		newTask.setInstanceId(instance.getId());
 		newTask.setIsDone(Byte.valueOf("0"));
 		newTask.setCreateTime(new Date());
+		newTask.setUpdateTime(new Date());
 		newTask.setNodeName(nextNode.getName());
 		newTask.setNodeDescription(nextNode.getDescription());
 		task.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
@@ -227,7 +256,6 @@ public class EasyFlowEngine {
 				taskListDto.setFlowName(tuple.get(6, String.class));
 				taskListDto.setFormUrl(tuple.get(7, String.class));
 				taskListDto.setPublisher(tuple.get(8, String.class));
-				taskListDto.setCreateTime(tuple.get(9, Date.class));
 				result.add(taskListDto);
 			}
 		}
@@ -291,7 +319,7 @@ public class EasyFlowEngine {
 				taskListDto.setFlowName(String.valueOf(tuple[6]));
 				taskListDto.setFormUrl(String.valueOf(tuple[7]));
 				taskListDto.setPublisher(String.valueOf(tuple[8]));
-				// taskListDto.setCreateTime(String.valueOf(tuple[9]));
+				taskListDto.setCreateTime(String.valueOf(tuple[9]));
 				taskListDto.setBusinesskey(String.valueOf(tuple[10]));
 				result.add(taskListDto);
 			}
@@ -307,8 +335,106 @@ public class EasyFlowEngine {
 	 * @return
 	 */
 	@Transactional(readOnly = true)
-	public List<EasyFlowTask> queryTask(String instanceId) {
-		List<EasyFlowTask> tasks = this.taskRepository.findByInstanceIdOrderByCreateTimeAsc(instanceId);
-		return tasks;
+	public List<EasyFlowTaskListDto> queryTask(String instanceId) {
+		List<EasyFlowTaskListDto> result = new ArrayList<EasyFlowTaskListDto>();
+
+		List<Object[]> tasksTuple = this.taskRepository.findByInstanceIdOrderByCreateTimeAsc(instanceId);
+
+		if (CollectionUtils.isNotEmpty(tasksTuple)) {
+			EasyFlowTaskListDto taskListDto = null;
+			for (Object[] tuple : tasksTuple) {
+				taskListDto = new EasyFlowTaskListDto();
+				taskListDto.setId(String.valueOf(tuple[0]));
+				taskListDto.setInstanceId(String.valueOf(tuple[1]));
+				taskListDto.setIsDone((Byte) tuple[2]);
+				taskListDto.setNodeName(String.valueOf(tuple[3]));
+				taskListDto.setNodeDescription(String.valueOf(tuple[4]));
+
+				taskListDto.setApprovalStatus(tuple[5] != null ? (Byte) tuple[5] : null);
+				if (tuple[6] != null) {
+					taskListDto.setUpdateTime(tuple[6].toString());
+				} else {
+					taskListDto.setUpdateTime("");
+				}
+
+				taskListDto.setCompleteResult(tuple[7] != null ? tuple[7].toString() : "");
+				taskListDto.setFlowKey(String.valueOf(tuple[8]));
+				taskListDto.setFlowName(String.valueOf(tuple[9]));
+				taskListDto.setFormUrl(String.valueOf(tuple[10]));
+				taskListDto.setPublisher(String.valueOf(tuple[11]));
+				taskListDto.setCreateTime(String.valueOf(tuple[12]));
+				taskListDto.setBusinesskey(tuple[13].toString());
+				taskListDto.setAssignment(Integer.valueOf(tuple[14].toString()));
+				result.add(taskListDto);
+			}
+		}
+		// fill name
+
+		List<Integer> assignmentIds = result.stream().map(t -> t.getAssignment()).collect(Collectors.toList());
+
+		Map<Integer, String> userNameMap = this.user.getUserName(assignmentIds);
+
+		result.stream().forEach(t -> t.setAssignmentName(userNameMap.get(t.getAssignment())));
+
+		return result;
 	}
+
+	/**
+	 * 关闭流程
+	 * 
+	 * @param flowInstanceId
+	 */
+	@Transactional(rollbackFor = { Exception.class }, propagation = Propagation.REQUIRED)
+	public void shutdown(String flowInstanceId, String nodeName) {
+		EasyFlowInstance old = this.instanceRepository.findOne(flowInstanceId);
+
+		JsonFlowNode filterNode = this.filterNode(old.getFlow(), nodeName);
+
+		old.setCurrentNode(filterNode.getName());
+		old.setCurrentNodeDescription(filterNode.getDescription());
+		old.setStatus(STATUS_ENDING);
+		old.setUpdateTime(new Date());
+		old.setUpdateBy(this.user.getCurrentUsername());
+		// delete task
+		List<EasyFlowTask> tasks = this.taskRepository.findByInstanceId(flowInstanceId);
+		tasks.forEach(t -> t.setIsDelete(Byte.valueOf("1")));
+		this.taskRepository.save(tasks);
+	}
+
+	/**
+	 * 
+	 * 直接完成任务 。无审批记录
+	 * 
+	 * @param flow
+	 * @param context
+	 * @return
+	 */
+	@Transactional(rollbackFor = { Exception.class }, propagation = Propagation.REQUIRED)
+	public EasyFlowInstance complete(JsonFlow flow, EasyFlowContext context, String businessKey) {
+		EasyFlowInstance instance = new EasyFlowInstance();
+		instance.setFlow(flow);
+		instance.setCreateTime(new Date());
+		instance.setUpdateTime(new Date());
+		instance.setStatus(STATUS_ENDING);
+		instance.setBusinesskey(businessKey);
+		instance.setCreateBy(user.getCurrentUsername());
+		instance.setCreateId(user.getCurrentUserid());
+		// 最后完成任务点
+		JsonFlowNode lastNode = this.filterNodeByType(flow, NODE_TYPE_END);
+		instance.setCurrentNode(lastNode.getName());
+		instance.setCurrentNodeDescription(lastNode.getDescription());
+		this.instanceRepository.save(instance);
+		return instance;
+	}
+
+	public JsonFlowNode filterNodeByType(JsonFlow flow, String nodeType) {
+		Optional<JsonFlowNode> findFirst = flow.getNodes().stream().filter(f -> f.getType().equals(nodeType))
+				.findFirst();
+		if (findFirst.isPresent()) {
+			return findFirst.get();
+		} else {
+			throw new RuntimeException("找不到节点");
+		}
+	}
+
 }

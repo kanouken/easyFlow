@@ -1,7 +1,5 @@
 package io.kanouken.easyflow.model.dto;
 
-import java.util.Date;
-
 public class EasyFlowTaskListDto {
 
 	private String id;
@@ -14,14 +12,34 @@ public class EasyFlowTaskListDto {
 	// 发起人
 	private String publisher;
 	// 执行人 id
-	private String assignment;
+	private Integer assignment;
+
+	private String assignmentName;
+
+	public String getAssignmentName() {
+		return assignmentName;
+	}
+
+	public void setAssignmentName(String assignmentName) {
+		this.assignmentName = assignmentName;
+	}
 
 	private String businesskey;
 
 	private Byte isDone;
 
+	private Byte approvalStatus;
+
 	public String getBusinesskey() {
 		return businesskey;
+	}
+
+	public Byte getApprovalStatus() {
+		return approvalStatus;
+	}
+
+	public void setApprovalStatus(Byte approvalStatus) {
+		this.approvalStatus = approvalStatus;
 	}
 
 	public void setBusinesskey(String businesskey) {
@@ -92,11 +110,11 @@ public class EasyFlowTaskListDto {
 		this.publisher = publisher;
 	}
 
-	public String getAssignment() {
+	public Integer getAssignment() {
 		return assignment;
 	}
 
-	public void setAssignment(String assignment) {
+	public void setAssignment(Integer assignment) {
 		this.assignment = assignment;
 	}
 
@@ -108,19 +126,19 @@ public class EasyFlowTaskListDto {
 		this.isDone = isDone;
 	}
 
-	public Date getCreateTime() {
+	public String getCreateTime() {
 		return createTime;
 	}
 
-	public void setCreateTime(Date createTime) {
+	public void setCreateTime(String createTime) {
 		this.createTime = createTime;
 	}
 
-	public Date getUpdateTime() {
+	public String getUpdateTime() {
 		return updateTime;
 	}
 
-	public void setUpdateTime(Date updateTime) {
+	public void setUpdateTime(String updateTime) {
 		this.updateTime = updateTime;
 	}
 
@@ -132,8 +150,8 @@ public class EasyFlowTaskListDto {
 		this.completeResult = completeResult;
 	}
 
-	private Date createTime;
-	private Date updateTime;
+	private String createTime;
+	private String updateTime;
 
 	private String completeResult;
 

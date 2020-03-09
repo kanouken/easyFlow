@@ -27,20 +27,27 @@ public class EasyFlowInstance {
 
 	private String createBy;
 
+	private Integer createId;
+
 	private String updateBy;
 
 	private Date updateTime;
 
-	private Byte isDone;
+	private Byte status;
 
 	private String currentNode;
 
 	private String currentNodeDescription;
 
-	/**
-	 * 业务编号
-	 */
 	private String businesskey;
+
+	public Integer getCreateId() {
+		return createId;
+	}
+
+	public void setCreateId(Integer createId) {
+		this.createId = createId;
+	}
 
 	public String getCreateBy() {
 		return createBy;
@@ -74,12 +81,12 @@ public class EasyFlowInstance {
 		this.updateTime = updateTime;
 	}
 
-	public Byte getIsDone() {
-		return isDone;
+	public Byte getStatus() {
+		return status;
 	}
 
-	public void setIsDone(Byte isDone) {
-		this.isDone = isDone;
+	public void setStatus(Byte status) {
+		this.status = status;
 	}
 
 	public String getCurrentNode() {
