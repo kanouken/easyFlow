@@ -1,8 +1,10 @@
 # easyFlow
-an simple java flow framework
+一个简单的基于json文件配置的工作流框架
 
+# 特性
+    
 
-# how to use
+# 如何使用
 
 
 @Autowired
@@ -65,3 +67,5 @@ an simple java flow framework
 	]
 }
 ```
+# 绘制流程图
+暂无相关组件
