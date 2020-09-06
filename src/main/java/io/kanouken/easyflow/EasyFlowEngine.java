@@ -39,6 +39,8 @@ public class EasyFlowEngine {
 
 	public static final String NODE_TYPE_END = "end";
 
+	public static final String NODE_TYPE_EVENT_SHUTDOWN = "shutdownEvent";
+
 	public static final Byte STATUS_RUNNING = Byte.valueOf("1");
 
 	public static final Byte STATUS_ENDING = Byte.valueOf("2");
@@ -382,14 +384,46 @@ public class EasyFlowEngine {
 	/**
 	 * 关闭流程
 	 * 
+	 * @see #{@link #shutdown(String)}
 	 * @param flowInstanceId
 	 */
+	@Deprecated
 	@Transactional(rollbackFor = { Exception.class }, propagation = Propagation.REQUIRED)
 	public void shutdown(String flowInstanceId, String nodeName) {
 		EasyFlowInstance old = this.instanceRepository.findOne(flowInstanceId);
 
 		JsonFlowNode filterNode = this.filterNode(old.getFlow(), nodeName);
 
+		old.setCurrentNode(filterNode.getName());
+		old.setCurrentNodeDescription(filterNode.getDescription());
+		old.setStatus(STATUS_ENDING);
+		old.setUpdateTime(new Date());
+		old.setUpdateBy(this.user.getCurrentUsername());
+		// delete task
+		List<EasyFlowTask> tasks = this.taskRepository.findByInstanceId(flowInstanceId);
+		tasks.forEach(t -> t.setIsDelete(Byte.valueOf("1")));
+		this.taskRepository.save(tasks);
+	}
+
+	/**
+	 * 关闭流程 获取type 类型为 shutdownEvent 的节点 如果找不到就填充已取消
+	 * 
+	 * @param flowInstanceId
+	 */
+	@Transactional(rollbackFor = { Exception.class }, propagation = Propagation.REQUIRED)
+	public void shutdown(String flowInstanceId) {
+		EasyFlowInstance old = this.instanceRepository.findOne(flowInstanceId);
+		JsonFlowNode filterNode = null;
+		try {
+			filterNode = this.filterNodeByType(old.getFlow(), NODE_TYPE_EVENT_SHUTDOWN);
+		} catch (Exception e) {
+
+		}
+		if (null == filterNode) {
+			// 填充默认停止流程时候的节点信息
+			filterNode = new JsonFlowNode();
+			filterNode.setDescription("已取消");
+		}
 		old.setCurrentNode(filterNode.getName());
 		old.setCurrentNodeDescription(filterNode.getDescription());
 		old.setStatus(STATUS_ENDING);
