@@ -2,6 +2,7 @@ package io.kanouken.easyflow;
 
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -197,6 +198,15 @@ public class EasyFlowEngine {
 	private Integer evalAssignments(String expression, Map<String, Object> context) {
 		Integer eval = MVEL.eval(expression, context, Integer.class);
 		return eval;
+	}
+
+	public static void main(String[] args) {
+
+		Map<String, Object> map = new HashMap<String, Object>();
+		Integer eval = MVEL.eval("1", map, Integer.class);
+
+		System.out.println(eval);
+
 	}
 
 	/**
