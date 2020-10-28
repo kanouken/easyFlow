@@ -1,6 +1,7 @@
 package io.kanouken.easyflow;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +12,7 @@ import javax.persistence.Tuple;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
+import org.hibernate.type.TrueFalseType;
 import org.mvel2.MVEL;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -19,10 +21,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import io.kanouken.easyflow.JsonFlowReader.JsonFlow;
 import io.kanouken.easyflow.JsonFlowReader.JsonFlowNode;
+import io.kanouken.easyflow.model.EasyFlowClaim;
 import io.kanouken.easyflow.model.EasyFlowInstance;
 import io.kanouken.easyflow.model.EasyFlowTask;
 import io.kanouken.easyflow.model.IEasyFlowBusinessService;
+import io.kanouken.easyflow.model.dto.EasyFlowClaimListDto;
 import io.kanouken.easyflow.model.dto.EasyFlowTaskListDto;
+import io.kanouken.easyflow.repository.EasyFlowClaimRepository;
 import io.kanouken.easyflow.repository.EasyFlowInstanceRepository;
 import io.kanouken.easyflow.repository.EasyFlowTaskRepository;
 import io.kanouken.easyflow.user.IEasyFlowUser;
@@ -44,12 +49,16 @@ public class EasyFlowEngine {
 	public static final Byte STATUS_RUNNING = Byte.valueOf("1");
 
 	public static final Byte STATUS_ENDING = Byte.valueOf("2");
+	private static Object claimLock = new Object();
 
 	@Autowired
 	EasyFlowInstanceRepository instanceRepository;
 
 	@Autowired
 	EasyFlowTaskRepository taskRepository;
+
+	@Autowired
+	EasyFlowClaimRepository claimRepo;
 
 	/**
 	 * start
@@ -75,11 +84,11 @@ public class EasyFlowEngine {
 		String nextNodeName = nodes.get(1).getNextNode();
 		JsonFlowNode nextNode = this.filterNode(flow, nextNodeName);
 		String type = nextNode.getType();
-		Integer assignment = null;
+		List<Integer> assignment = null;
 		if (type.equals("gateway")) {
 			// FIXME first node must not be the gateway
 		} else {
-			Integer assignmentIds = this.evalAssignments(nextNode.getAssignments(), context.getFacts());
+			List<Integer> assignmentIds = this.evalAssignments(nextNode.getAssignments(), context.getFacts());
 			assignment = assignmentIds;
 		}
 
@@ -100,17 +109,30 @@ public class EasyFlowEngine {
 		this.taskRepository.save(firstTask);
 
 		// createTask
-		// 不支持签收
-		EasyFlowTask task = new EasyFlowTask();
-		task.setAssignment(assignment);
-		task.setInstanceId(instance.getId());
-		task.setIsDone(Byte.valueOf("0"));
-		task.setCreateTime(new Date());
-		task.setUpdateTime(new Date());
-		task.setNodeName(nextNode.getName());
-		task.setNodeDescription(nextNode.getDescription());
-		task.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
-		this.taskRepository.save(task);
+		// 签收
+		if (assignment != null && assignment.size() > 1) {
+			EasyFlowClaim claim = new EasyFlowClaim();
+			claim.setCandidates(assignment);
+			claim.setInstanceId(instance.getId());
+			claim.setStatus(Byte.valueOf("0"));
+			claim.setCreateTime(new Date());
+			claim.setUpdateTime(new Date());
+			claim.setNodeName(nextNode.getName());
+			claim.setNodeDescription(nextNode.getDescription());
+			claim.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
+			this.claimRepo.save(claim);
+		} else {
+			EasyFlowTask task = new EasyFlowTask();
+			task.setAssignment(assignment.get(0));
+			task.setInstanceId(instance.getId());
+			task.setIsDone(Byte.valueOf("0"));
+			task.setCreateTime(new Date());
+			task.setUpdateTime(new Date());
+			task.setNodeName(nextNode.getName());
+			task.setNodeDescription(nextNode.getDescription());
+			task.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
+			this.taskRepository.save(task);
+		}
 
 		return instance;
 	}
@@ -126,7 +148,7 @@ public class EasyFlowEngine {
 
 		EasyFlowTask task = this.taskRepository.findOne(taskId);
 		EasyFlowInstance instance = this.instanceRepository.findOne(task.getInstanceId());
-		context.put("publisher", instance.getCreateId());
+		context.put("publisher", Arrays.asList(instance.getCreateId()));
 		JsonFlowNode currentNode = this.filterNode(instance.getFlow(), task.getNodeName());
 		JsonFlowNode nextNode = this.filterNode(instance.getFlow(), currentNode.getNextNode());
 		task.setIsDone(Byte.valueOf("1"));
@@ -135,7 +157,7 @@ public class EasyFlowEngine {
 		task.setUpdateTime(new Date());
 		// save currentTask
 		this.taskRepository.save(task);
-		Integer assignment = null;
+		List<Integer> assignment = null;
 
 		// next node
 		if (nextNode.getType().equals("gateway")) {
@@ -153,22 +175,36 @@ public class EasyFlowEngine {
 			return instance;
 		} else {
 			// task
-			Integer assignmentIds = this.evalAssignments(nextNode.getAssignments(), context.getFacts());
+			List<Integer> assignmentIds = this.evalAssignments(nextNode.getAssignments(), context.getFacts());
 			assignment = assignmentIds;
 
 		}
-		// 不支持签收！！！！！
+		//
 
-		EasyFlowTask newTask = new EasyFlowTask();
-		newTask.setAssignment(assignment);
-		newTask.setInstanceId(instance.getId());
-		newTask.setIsDone(Byte.valueOf("0"));
-		newTask.setCreateTime(new Date());
-		newTask.setUpdateTime(new Date());
-		newTask.setNodeName(nextNode.getName());
-		newTask.setNodeDescription(nextNode.getDescription());
-		task.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
-		this.taskRepository.save(newTask);
+		if (assignment != null && assignment.size() > 1) {
+			EasyFlowClaim claim = new EasyFlowClaim();
+			claim.setCandidates(assignment);
+			claim.setInstanceId(instance.getId());
+			claim.setStatus(Byte.valueOf("0"));
+			claim.setCreateTime(new Date());
+			claim.setUpdateTime(new Date());
+			claim.setNodeName(nextNode.getName());
+			claim.setNodeDescription(nextNode.getDescription());
+			claim.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
+			this.claimRepo.save(claim);
+		} else {
+			EasyFlowTask newTask = new EasyFlowTask();
+			newTask.setAssignment(assignment.get(0));
+			newTask.setInstanceId(instance.getId());
+			newTask.setIsDone(Byte.valueOf("0"));
+			newTask.setCreateTime(new Date());
+			newTask.setUpdateTime(new Date());
+			newTask.setNodeName(nextNode.getName());
+			newTask.setNodeDescription(nextNode.getDescription());
+			newTask.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
+			this.taskRepository.save(newTask);
+		}
+
 		instance.setUpdateTime(new Date());
 		instance.setCurrentNode(nextNode.getName());
 		instance.setCurrentNodeDescription(nextNode.getDescription());
@@ -194,8 +230,8 @@ public class EasyFlowEngine {
 		return result;
 	}
 
-	private Integer evalAssignments(String expression, Map<String, Object> context) {
-		Integer eval = MVEL.eval(expression, context, Integer.class);
+	private List<Integer> evalAssignments(String expression, Map<String, Object> context) {
+		List<Integer> eval = MVEL.eval(expression, context, List.class);
 		return eval;
 	}
 
@@ -381,6 +417,30 @@ public class EasyFlowEngine {
 		return result;
 	}
 
+	@Transactional(readOnly = true)
+	public List<EasyFlowClaimListDto> queryClaim(Integer assignment) {
+
+		List<EasyFlowClaimListDto> result = new ArrayList<EasyFlowClaimListDto>();
+
+		List<Object[]> tasksTuple = this.claimRepo.findByCandidaterAndStatus(assignment + "");
+
+		if (CollectionUtils.isNotEmpty(tasksTuple)) {
+			EasyFlowClaimListDto claimListDto = null;
+			for (Object[] tuple : tasksTuple) {
+				claimListDto = new EasyFlowClaimListDto();
+				claimListDto.setId(String.valueOf(tuple[0]));
+				claimListDto.setNodeName(String.valueOf(tuple[1]));
+				claimListDto.setNodeDescription(String.valueOf(tuple[2]));
+				claimListDto.setFlowName(String.valueOf(tuple[3]));
+				claimListDto.setCreateTime(String.valueOf(tuple[4]));
+				result.add(claimListDto);
+			}
+		}
+
+		return result;
+
+	}
+
 	/**
 	 * 关闭流程
 	 * 
@@ -471,4 +531,27 @@ public class EasyFlowEngine {
 		}
 	}
 
+	@Transactional(rollbackFor = { Exception.class }, propagation = Propagation.REQUIRED)
+	public synchronized void claim(String taskId, Integer assignment) {
+		EasyFlowClaim old = this.claimRepo.findOne(taskId);
+		EasyFlowInstance instance = this.instanceRepository.findOne(old.getInstanceId());
+		if (old.getStatus().equals(Byte.valueOf("1"))) {
+			throw new RuntimeException("任务已签收");
+		}
+		old.setStatus(Byte.valueOf("1"));
+		old.setClaimTime(new Date());
+		old.setClaimer(assignment);
+		this.claimRepo.save(old);
+		// add task
+		EasyFlowTask newTask = new EasyFlowTask();
+		newTask.setAssignment(assignment);
+		newTask.setInstanceId(instance.getId());
+		newTask.setIsDone(Byte.valueOf("0"));
+		newTask.setCreateTime(new Date());
+		newTask.setUpdateTime(new Date());
+		newTask.setNodeName(old.getNodeName());
+		newTask.setNodeDescription(old.getNodeDescription());
+		newTask.setVars(old.getVars());
+		this.taskRepository.save(newTask);
+	}
 }

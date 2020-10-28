@@ -56,6 +56,7 @@ public class EasyFlowTask {
 	 * 办结状态
 	 */
 	private Byte approvalStatus;
+	
 
 	/**
 	 * 变量
