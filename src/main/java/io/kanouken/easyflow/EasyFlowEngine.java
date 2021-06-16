@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import io.kanouken.easyflow.JsonFlowReader.JsonFlow;
 import io.kanouken.easyflow.JsonFlowReader.JsonFlowNode;
+import io.kanouken.easyflow.exception.WorkflowException;
 import io.kanouken.easyflow.model.EasyFlowClaim;
 import io.kanouken.easyflow.model.EasyFlowInstance;
 import io.kanouken.easyflow.model.EasyFlowTask;
@@ -147,6 +148,9 @@ public class EasyFlowEngine {
 		context.put("flowUser", this.user);
 
 		EasyFlowTask task = this.taskRepository.findOne(taskId);
+		if(task.getIsDone().equals(Byte.valueOf("1"))){
+			throw new WorkflowException("节点已审批 请勿重复操作！");
+		}		
 		EasyFlowInstance instance = this.instanceRepository.findOne(task.getInstanceId());
 		context.put("publisher", Arrays.asList(instance.getCreateId()));
 		JsonFlowNode currentNode = this.filterNode(instance.getFlow(), task.getNodeName());
@@ -492,7 +496,14 @@ public class EasyFlowEngine {
 		// delete task
 		List<EasyFlowTask> tasks = this.taskRepository.findByInstanceId(flowInstanceId);
 		tasks.forEach(t -> t.setIsDelete(Byte.valueOf("1")));
+		// TODO 签收任务也要删除
 		this.taskRepository.save(tasks);
+
+		List<EasyFlowClaim> claims = this.claimRepo.findByInstanceId(flowInstanceId);
+		if (CollectionUtils.isNotEmpty(claims)) {
+			claims.forEach(c -> c.setIsDelete(Byte.valueOf("1")));
+			this.claimRepo.save(claims);
+		}
 	}
 
 	/**
@@ -537,6 +548,13 @@ public class EasyFlowEngine {
 		EasyFlowInstance instance = this.instanceRepository.findOne(old.getInstanceId());
 		if (old.getStatus().equals(Byte.valueOf("1"))) {
 			throw new RuntimeException("任务已签收");
+		}
+
+		// 取消的时候 还没点签收 ，签收单被一并删除。
+		// 取消的时候 已经被签收了且生成了任务 。。任务和签收单一起被删除
+		// 判断 流程是否被关闭
+		if (instance.getStatus().equals(STATUS_ENDING)) {
+			throw new RuntimeException("流程已结束");
 		}
 		old.setStatus(Byte.valueOf("1"));
 		old.setClaimTime(new Date());
