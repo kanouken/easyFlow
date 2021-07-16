@@ -437,6 +437,7 @@ public class EasyFlowEngine {
 				claimListDto.setNodeDescription(String.valueOf(tuple[2]));
 				claimListDto.setFlowName(String.valueOf(tuple[3]));
 				claimListDto.setCreateTime(String.valueOf(tuple[4]));
+				claimListDto.setPublisher(String.valueOf(tuple[5]));
 				result.add(claimListDto);
 			}
 		}

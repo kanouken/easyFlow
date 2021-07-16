@@ -8,6 +8,15 @@ public class EasyFlowClaimListDto {
 	private String instanceId;
 	private String flowName;
 	private String createTime;
+	private String publisher;
+
+	public String getPublisher() {
+		return publisher;
+	}
+
+	public void setPublisher(String publisher) {
+		this.publisher = publisher;
+	}
 
 	public String getId() {
 		return id;
