@@ -88,11 +88,10 @@ public class EasyFlowEngine {
 		List<Integer> assignment = null;
 		if (type.equals("gateway")) {
 			// FIXME first node must not be the gateway
-		} else {
-			List<Integer> assignmentIds = this.evalAssignments(nextNode.getAssignments(), context.getFacts());
-			assignment = assignmentIds;
-		}
-
+			 nextNode = this.gatewayChoose(instance, context, nextNode);
+		} 
+		List<Integer> assignmentIds = this.evalAssignments(nextNode.getAssignments(), context.getFacts());
+		assignment = assignmentIds;
 		instance.setCurrentNode(nextNode.getName());
 		instance.setCurrentNodeDescription(nextNode.getDescription());
 		this.instanceRepository.save(instance);
@@ -421,6 +420,8 @@ public class EasyFlowEngine {
 		return result;
 	}
 
+	
+	
 	@Transactional(readOnly = true)
 	public List<EasyFlowClaimListDto> queryClaim(Integer assignment) {
 
