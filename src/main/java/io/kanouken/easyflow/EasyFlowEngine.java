@@ -107,6 +107,7 @@ public class EasyFlowEngine {
 		firstTask.setUpdateTime(new Date());
 		firstTask.setNodeName(autoCompleteNode.getName());
 		firstTask.setNodeDescription(autoCompleteNode.getDescription());
+		firstTask.setType(autoCompleteNode.getType());
 		this.taskRepository.save(firstTask);
 
 		// createTask
@@ -132,6 +133,7 @@ public class EasyFlowEngine {
 			task.setNodeName(nextNode.getName());
 			task.setNodeDescription(nextNode.getDescription());
 			task.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
+			task.setType(nextNode.getType());
 			this.taskRepository.save(task);
 		}
 
@@ -148,9 +150,9 @@ public class EasyFlowEngine {
 		context.put("flowUser", this.user);
 
 		EasyFlowTask task = this.taskRepository.findOne(taskId);
-		if(task.getIsDone().equals(Byte.valueOf("1"))){
+		if (task.getIsDone().equals(Byte.valueOf("1"))) {
 			throw new WorkflowException("节点已审批 请勿重复操作！");
-		}		
+		}
 		EasyFlowInstance instance = this.instanceRepository.findOne(task.getInstanceId());
 		context.put("publisher", Arrays.asList(instance.getCreateId()));
 		JsonFlowNode currentNode = this.filterNode(instance.getFlow(), task.getNodeName());
@@ -177,6 +179,9 @@ public class EasyFlowEngine {
 			this.instanceRepository.save(instance);
 			// end
 			return instance;
+		} else if (nextNode.getType().equals("event")) {
+			// 不需要生成任务
+			assignment = Arrays.asList(0);
 		} else {
 			// task
 			List<Integer> assignmentIds = this.evalAssignments(nextNode.getAssignments(), context.getFacts());
@@ -185,30 +190,34 @@ public class EasyFlowEngine {
 		}
 		//
 
-		if (assignment != null && assignment.size() > 1) {
-			EasyFlowClaim claim = new EasyFlowClaim();
-			claim.setCandidates(assignment);
-			claim.setInstanceId(instance.getId());
-			claim.setStatus(Byte.valueOf("0"));
-			claim.setCreateTime(new Date());
-			claim.setUpdateTime(new Date());
-			claim.setNodeName(nextNode.getName());
-			claim.setNodeDescription(nextNode.getDescription());
-			claim.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
-			this.claimRepo.save(claim);
-		} else {
-			EasyFlowTask newTask = new EasyFlowTask();
-			newTask.setAssignment(assignment.get(0));
-			newTask.setInstanceId(instance.getId());
-			newTask.setIsDone(Byte.valueOf("0"));
-			newTask.setCreateTime(new Date());
-			newTask.setUpdateTime(new Date());
-			newTask.setNodeName(nextNode.getName());
-			newTask.setNodeDescription(nextNode.getDescription());
-			newTask.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
-			this.taskRepository.save(newTask);
-		}
+		if (assignment != null) {
 
+			if (assignment.size() > 1) {
+				EasyFlowClaim claim = new EasyFlowClaim();
+				claim.setCandidates(assignment);
+				claim.setInstanceId(instance.getId());
+				claim.setStatus(Byte.valueOf("0"));
+				claim.setCreateTime(new Date());
+				claim.setUpdateTime(new Date());
+				claim.setNodeName(nextNode.getName());
+				claim.setNodeDescription(nextNode.getDescription());
+				claim.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
+				claim.setType(nextNode.getType());
+				this.claimRepo.save(claim);
+			} else {
+				EasyFlowTask newTask = new EasyFlowTask();
+				newTask.setAssignment(assignment.get(0));
+				newTask.setInstanceId(instance.getId());
+				newTask.setIsDone(Byte.valueOf("0"));
+				newTask.setCreateTime(new Date());
+				newTask.setUpdateTime(new Date());
+				newTask.setNodeName(nextNode.getName());
+				newTask.setNodeDescription(nextNode.getDescription());
+				newTask.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
+				newTask.setType(nextNode.getType());
+				this.taskRepository.save(newTask);
+			}
+		}
 		instance.setUpdateTime(new Date());
 		instance.setCurrentNode(nextNode.getName());
 		instance.setCurrentNodeDescription(nextNode.getDescription());
@@ -241,12 +250,9 @@ public class EasyFlowEngine {
 
 	/**
 	 * 
-	 * @param instance
-	 *            流程实例
-	 * @param context
-	 *            流程context
-	 * @param gateway
-	 *            node 当前网关节点
+	 * @param instance 流程实例
+	 * @param context  流程context
+	 * @param gateway  node 当前网关节点
 	 */
 	private JsonFlowNode gatewayChoose(EasyFlowInstance instance, EasyFlowContext context, JsonFlowNode node) {
 		List<Map<String, Object>> gatewayConditions = node.getGatewayConditions();
@@ -269,10 +275,8 @@ public class EasyFlowEngine {
 	/**
 	 * 根据办理人 + 流程key 查询办理事项 包含 已办 和待办
 	 * 
-	 * @param assignment
-	 *            办理人
-	 * @param flowKey
-	 *            流程key
+	 * @param assignment 办理人
+	 * @param flowKey    流程key
 	 * @return
 	 */
 	@Transactional(readOnly = true)
@@ -418,6 +422,38 @@ public class EasyFlowEngine {
 
 		result.stream().forEach(t -> t.setAssignmentName(userNameMap.get(t.getAssignment())));
 
+		return result;
+	}
+
+	/**
+	 * 根据流程实例id 任务类型查询 不会返回执行人信息 谨慎调用
+	 * 
+	 * @param instanceId
+	 * @param taskType
+	 * @return
+	 */
+	@Transactional(readOnly = true)
+	public List<EasyFlowTaskListDto> queryTask(String instanceId, String taskType) {
+		List<EasyFlowTaskListDto> result = new ArrayList<EasyFlowTaskListDto>();
+
+		List<EasyFlowTask> tasks = this.taskRepository.findByInstanceIdAndType(instanceId, taskType);
+
+		if (CollectionUtils.isNotEmpty(tasks)) {
+			EasyFlowTaskListDto taskListDto = null;
+			for (EasyFlowTask t : tasks) {
+				taskListDto = new EasyFlowTaskListDto();
+				taskListDto.setId(t.getId());
+				taskListDto.setInstanceId(t.getInstanceId());
+				taskListDto.setIsDone(t.getIsDone());
+				taskListDto.setNodeName(t.getNodeName());
+				taskListDto.setNodeDescription(t.getNodeDescription());
+				taskListDto.setApprovalStatus(t.getApprovalStatus());
+//				taskListDto.setUpdateTime(t.getUpdateTime());
+				taskListDto.setCompleteResult(t.getCompleteResult());
+				taskListDto.setVars(t.getVars());
+				result.add(taskListDto);
+			}
+		}
 		return result;
 	}
 
@@ -571,6 +607,7 @@ public class EasyFlowEngine {
 		newTask.setNodeName(old.getNodeName());
 		newTask.setNodeDescription(old.getNodeDescription());
 		newTask.setVars(old.getVars());
+		newTask.setType(old.getType());
 		this.taskRepository.save(newTask);
 	}
 }

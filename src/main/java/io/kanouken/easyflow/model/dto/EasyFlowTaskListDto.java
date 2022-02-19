@@ -1,5 +1,7 @@
 package io.kanouken.easyflow.model.dto;
 
+import java.util.Map;
+
 public class EasyFlowTaskListDto {
 
 	private String id;
@@ -15,6 +17,25 @@ public class EasyFlowTaskListDto {
 	private Integer assignment;
 
 	private String assignmentName;
+
+	private String type;
+	private Map<String, Object> vars;
+
+	public Map<String, Object> getVars() {
+		return vars;
+	}
+
+	public void setVars(Map<String, Object> vars) {
+		this.vars = vars;
+	}
+
+	public String getType() {
+		return type;
+	}
+
+	public void setType(String type) {
+		this.type = type;
+	}
 
 	public String getAssignmentName() {
 		return assignmentName;

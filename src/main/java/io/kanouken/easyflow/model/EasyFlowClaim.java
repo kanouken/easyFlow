@@ -64,6 +64,16 @@ public class EasyFlowClaim {
 	@Column(columnDefinition = "json")
 	private Map<String, Object> vars;
 
+	private String type;
+
+	public String getType() {
+		return type;
+	}
+
+	public void setType(String type) {
+		this.type = type;
+	}
+
 	/**
 	 * 0 未签收 1 已签收
 	 */
