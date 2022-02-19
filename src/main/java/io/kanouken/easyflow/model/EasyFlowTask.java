@@ -57,6 +57,7 @@ public class EasyFlowTask {
 	 */
 	private Byte approvalStatus;
 	
+	private String type;
 
 	/**
 	 * 变量
@@ -160,5 +161,15 @@ public class EasyFlowTask {
 	public void setNodeName(String nodeName) {
 		this.nodeName = nodeName;
 	}
+
+	public String getType() {
+		return type;
+	}
+
+	public void setType(String type) {
+		this.type = type;
+	}
+	
+	
 
 }

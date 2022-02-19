@@ -48,5 +48,7 @@ public interface EasyFlowTaskRepository extends CrudRepository<EasyFlowTask, Str
 	List<Object[]> findByInstanceIdOrderByCreateTimeAsc(String instanceId);
 
 	List<EasyFlowTask> findByInstanceId(String flowInstanceId);
+	
+	List<EasyFlowTask> findByInstanceIdAndType(String flowInstanceId,String type);
 
 }
