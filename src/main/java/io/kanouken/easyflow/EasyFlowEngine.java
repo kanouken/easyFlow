@@ -6,13 +6,16 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 import javax.persistence.Tuple;
+import javax.transaction.TransactionScoped;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.mvel2.MVEL;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -20,6 +23,8 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import io.kanouken.easyflow.JsonFlowReader.JsonFlow;
+import io.kanouken.easyflow.JsonFlowReader.JsonFlowForm;
+import io.kanouken.easyflow.JsonFlowReader.JsonFlowFormField;
 import io.kanouken.easyflow.JsonFlowReader.JsonFlowNode;
 import io.kanouken.easyflow.exception.WorkflowException;
 import io.kanouken.easyflow.model.EasyFlowClaim;
@@ -147,12 +152,13 @@ public class EasyFlowEngine {
 	@Transactional(rollbackFor = { Exception.class }, propagation = Propagation.REQUIRED)
 	public EasyFlowInstance completeTask(String taskId, EasyFlowContext context) {
 		context.put("flowUser", this.user);
-
+		// 检查表单必填项
 		EasyFlowTask task = this.taskRepository.findOne(taskId);
 		if (task.getIsDone().equals(Byte.valueOf("1"))) {
 			throw new WorkflowException("节点已审批 请勿重复操作！");
 		}
 		EasyFlowInstance instance = this.instanceRepository.findOne(task.getInstanceId());
+//		checkNodeFormParams(task, instance,context);
 		context.put("publisher", Arrays.asList(instance.getCreateId()));
 		JsonFlowNode currentNode = this.filterNode(instance.getFlow(), task.getNodeName());
 		JsonFlowNode nextNode = this.filterNode(instance.getFlow(), currentNode.getNextNode());
@@ -609,4 +615,56 @@ public class EasyFlowEngine {
 		newTask.setType(old.getType());
 		this.taskRepository.save(newTask);
 	}
+
+	/**
+	 * 当前任务
+	 * 
+	 * @param task     流程实例
+	 * @param instance 流程context
+	 * @param context
+	 */
+	@SuppressWarnings("all")
+	public void validateFormParams(String taskId, EasyFlowContext context) {
+
+		EasyFlowTask task = this.taskRepository.findOne(taskId);
+		EasyFlowInstance instance = this.instanceRepository.findOne(task.getInstanceId());
+		// vars
+		Map taskVars = (Map) context.getFacts().get(EF_VARS);
+		if (MapUtils.isEmpty(taskVars)) {
+			return;
+		}
+		JsonFlow flow = instance.getFlow();
+		List<JsonFlowForm> forms = flow.getForms();
+		if (CollectionUtils.isNotEmpty(forms)) {
+			// target node
+			String nodeName = task.getNodeName();
+			JsonFlowForm targetForm = forms.stream().filter(d -> d.getRefNode().equals(nodeName)).findFirst()
+					.orElse(null);
+			if (null != targetForm) {
+				List<JsonFlowFormField> fields = targetForm.getFields();
+				if (CollectionUtils.isNotEmpty(fields)) {
+					for (JsonFlowFormField jsonFlowFormField : fields) {
+						if (jsonFlowFormField.getRequired()) {
+							Object object = taskVars.get(jsonFlowFormField.getName());
+							if (!isObjectNotEmpty(object)) {
+								throw new WorkflowException(String.format("表单项 %s 是必填项！", StringUtils.defaultIfBlank(
+										jsonFlowFormField.getDescription(), jsonFlowFormField.getName())));
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	public static Boolean isObjectNotEmpty(Object obj) {
+		String str = Objects.toString(obj, "");
+		return StringUtils.isNotBlank(str);
+	}
+
+	@Transactional(readOnly = true)
+	public EasyFlowTask getTask(String taskId) {
+		return this.taskRepository.findOne(taskId);
+	}
+
 }

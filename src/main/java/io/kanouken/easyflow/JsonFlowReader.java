@@ -48,6 +48,16 @@ public class JsonFlowReader {
 
 		private List<JsonFlowNode> nodes;
 
+		private List<JsonFlowForm> forms;
+
+		public List<JsonFlowForm> getForms() {
+			return forms;
+		}
+
+		public void setForms(List<JsonFlowForm> forms) {
+			this.forms = forms;
+		}
+
 		public String getName() {
 			return name;
 		}
@@ -149,6 +159,68 @@ public class JsonFlowReader {
 
 		public void setNextNode(String nextNode) {
 			this.nextNode = nextNode;
+		}
+
+	}
+
+	public static class JsonFlowFormField {
+		private String name;
+		private String description;
+		private Boolean required;
+
+		public String getName() {
+			return name;
+		}
+
+		public void setName(String name) {
+			this.name = name;
+		}
+
+		public String getDescription() {
+			return description;
+		}
+
+		public void setDescription(String description) {
+			this.description = description;
+		}
+
+		public Boolean getRequired() {
+			return required;
+		}
+
+		public void setRequired(Boolean required) {
+			this.required = required;
+		}
+
+	}
+
+	public static class JsonFlowForm {
+		private String name;
+		private String refNode;
+		private List<JsonFlowFormField> fields;
+
+		public String getName() {
+			return name;
+		}
+
+		public void setName(String name) {
+			this.name = name;
+		}
+
+		public String getRefNode() {
+			return refNode;
+		}
+
+		public void setRefNode(String refNode) {
+			this.refNode = refNode;
+		}
+
+		public List<JsonFlowFormField> getFields() {
+			return fields;
+		}
+
+		public void setFields(List<JsonFlowFormField> fields) {
+			this.fields = fields;
 		}
 
 	}
