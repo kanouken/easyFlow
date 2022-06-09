@@ -27,6 +27,7 @@ import io.kanouken.easyflow.JsonFlowReader.JsonFlowForm;
 import io.kanouken.easyflow.JsonFlowReader.JsonFlowFormField;
 import io.kanouken.easyflow.JsonFlowReader.JsonFlowNode;
 import io.kanouken.easyflow.exception.WorkflowException;
+import io.kanouken.easyflow.interceptor.IEasyTaskInterceptor;
 import io.kanouken.easyflow.model.EasyFlowClaim;
 import io.kanouken.easyflow.model.EasyFlowInstance;
 import io.kanouken.easyflow.model.EasyFlowTask;
@@ -43,6 +44,9 @@ public class EasyFlowEngine {
 
 	@Autowired
 	IEasyFlowUser user;
+
+	@Autowired(required = false)
+	IEasyTaskInterceptor taskInterceptor;
 
 	public static final String EF_RESULT = "complete_result";
 	public static final String EF_APPROVAL_RESULT = "approvalStatus";
@@ -114,6 +118,8 @@ public class EasyFlowEngine {
 		firstTask.setType(autoCompleteNode.getType());
 		this.taskRepository.save(firstTask);
 
+		EasyFlowTask nextTask = null;
+		EasyFlowClaim  nextClaim = null;
 		// createTask
 		// 签收
 		if (assignment != null && assignment.size() > 1) {
@@ -126,6 +132,7 @@ public class EasyFlowEngine {
 			claim.setNodeName(nextNode.getName());
 			claim.setNodeDescription(nextNode.getDescription());
 			claim.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
+			nextClaim = claim;
 			this.claimRepo.save(claim);
 		} else {
 			EasyFlowTask task = new EasyFlowTask();
@@ -138,7 +145,12 @@ public class EasyFlowEngine {
 			task.setNodeDescription(nextNode.getDescription());
 			task.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
 			task.setType(nextNode.getType());
+			nextTask = task;
 			this.taskRepository.save(task);
+		}
+		
+		if (taskInterceptor != null) {
+			taskInterceptor.afterTask(null, instance, context, nextTask, nextClaim);
 		}
 
 		return instance;
@@ -158,6 +170,10 @@ public class EasyFlowEngine {
 			throw new WorkflowException("节点已审批 请勿重复操作！");
 		}
 		EasyFlowInstance instance = this.instanceRepository.findOne(task.getInstanceId());
+
+		if (taskInterceptor != null) {
+			taskInterceptor.beforeTask(task, instance, context);
+		}
 //		checkNodeFormParams(task, instance,context);
 		context.put("publisher", Arrays.asList(instance.getCreateId()));
 		JsonFlowNode currentNode = this.filterNode(instance.getFlow(), task.getNodeName());
@@ -195,6 +211,8 @@ public class EasyFlowEngine {
 		}
 		//
 
+		EasyFlowTask nextTask = null;
+		EasyFlowClaim nextClaim = null;
 		if (assignment != null) {
 
 			if (assignment.size() > 1) {
@@ -209,6 +227,7 @@ public class EasyFlowEngine {
 				claim.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
 				claim.setType(nextNode.getType());
 				this.claimRepo.save(claim);
+				nextClaim = claim;
 			} else {
 				EasyFlowTask newTask = new EasyFlowTask();
 				newTask.setAssignment(assignment.get(0));
@@ -221,6 +240,7 @@ public class EasyFlowEngine {
 				newTask.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
 				newTask.setType(nextNode.getType());
 				this.taskRepository.save(newTask);
+				nextTask = newTask;
 			}
 		}
 		instance.setUpdateTime(new Date());
@@ -228,6 +248,9 @@ public class EasyFlowEngine {
 		instance.setCurrentNodeDescription(nextNode.getDescription());
 		this.instanceRepository.save(instance);
 
+		if (taskInterceptor != null) {
+			taskInterceptor.afterTask(task, instance, context, nextTask, nextClaim);
+		}
 		return instance;
 	}
 
@@ -665,6 +688,30 @@ public class EasyFlowEngine {
 	@Transactional(readOnly = true)
 	public EasyFlowTask getTask(String taskId) {
 		return this.taskRepository.findOne(taskId);
+	}
+
+	@Transactional(readOnly = true)
+	public EasyFlowClaim getClaim(String claimId) {
+		return this.claimRepo.findOne(claimId);
+	}
+
+	/**
+	 * 查询待办任务数量 包括 待签收的任务
+	 * 
+	 * @param assignment
+	 */
+	@Transactional(readOnly = true)
+	public Integer countTodoTask(Integer assignment) {
+		Integer count = this.taskRepository.countByAssignmentAndIsDoneAndIsDelete(assignment, Byte.valueOf("0"),
+				Byte.valueOf("0"));
+		if (count == null) {
+			count = 0;
+		}
+		Integer results = this.claimRepo.countByCandidaterAndStatus(assignment + "");
+		Integer claimCount = null;
+		claimCount = results == null ? 0 : results;
+		return count + claimCount;
+
 	}
 
 }

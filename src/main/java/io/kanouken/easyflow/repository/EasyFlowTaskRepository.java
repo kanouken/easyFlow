@@ -1,7 +1,6 @@
 package io.kanouken.easyflow.repository;
 
 import java.util.List;
-import java.util.Map;
 
 import javax.persistence.Tuple;
 
@@ -10,7 +9,6 @@ import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
 
 import io.kanouken.easyflow.model.EasyFlowTask;
-import io.kanouken.easyflow.model.dto.EasyFlowTaskListDto;
 
 @Repository
 public interface EasyFlowTaskRepository extends CrudRepository<EasyFlowTask, String> {
@@ -50,5 +48,7 @@ public interface EasyFlowTaskRepository extends CrudRepository<EasyFlowTask, Str
 	List<EasyFlowTask> findByInstanceId(String flowInstanceId);
 	
 	List<EasyFlowTask> findByInstanceIdAndType(String flowInstanceId,String type);
+
+	Integer countByAssignmentAndIsDoneAndIsDelete(Integer assignment, Byte valueOf, Byte valueOf2);
 
 }

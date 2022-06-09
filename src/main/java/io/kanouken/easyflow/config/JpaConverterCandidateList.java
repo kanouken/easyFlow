@@ -8,6 +8,7 @@ import org.apache.commons.collections.CollectionUtils;
 
 import com.fasterxml.jackson.core.JsonGenerator.Feature;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -43,7 +44,7 @@ public class JpaConverterCandidateList implements AttributeConverter<List<Intege
 			if (dbData == null || dbData.equals("")) {
 				return null;
 			} else {
-				return om.readValue(dbData, List.class);
+				return om.readValue(dbData,new TypeReference<List<Integer>>(){});
 			}
 		} catch (Exception ex) {
 			ex.printStackTrace();
