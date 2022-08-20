@@ -637,6 +637,11 @@ public class EasyFlowEngine {
 		newTask.setVars(old.getVars());
 		newTask.setType(old.getType());
 		this.taskRepository.save(newTask);
+		
+		//任务签收后创建任务调用 任务创建拦截
+		if (taskInterceptor != null) {
+			taskInterceptor.afterTask(null, instance, null, newTask, null);
+		}
 	}
 
 	/**
