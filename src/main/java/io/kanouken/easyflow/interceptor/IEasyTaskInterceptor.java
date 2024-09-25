@@ -16,4 +16,12 @@ public interface IEasyTaskInterceptor {
 	public void beforeTask(EasyFlowTask task, EasyFlowInstance instance, EasyFlowContext context);
 
 	public void afterTask(EasyFlowTask task, EasyFlowInstance instance, EasyFlowContext context, EasyFlowTask nextTask, EasyFlowClaim nextClaim);
+
+
+	/**
+	 * 流程完成后
+	 * @param instance 流程实例
+	 * @param context  fact
+	 */
+	public void afterFlowFinished(EasyFlowInstance instance,EasyFlowContext context);
 }

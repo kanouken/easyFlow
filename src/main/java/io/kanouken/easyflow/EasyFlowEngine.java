@@ -1,23 +1,25 @@
 
 package io.kanouken.easyflow;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+import java.io.IOException;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import javax.persistence.Tuple;
 import javax.transaction.TransactionScoped;
 
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.mvel2.MVEL;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,6 +54,11 @@ public class EasyFlowEngine {
 	public static final String EF_APPROVAL_RESULT = "approvalStatus";
 	public static final String EF_VARS = "vars";
 
+    /**
+     * 标记上一次是驳回
+     */
+    public static final String EF_VAR_LAST_REJECT = "var_last_reject";
+
 	public static final String NODE_TYPE_END = "end";
 
 	public static final String NODE_TYPE_EVENT_SHUTDOWN = "shutdownEvent";
@@ -70,7 +77,19 @@ public class EasyFlowEngine {
 	@Autowired
 	EasyFlowClaimRepository claimRepo;
 
-	/**
+
+    public static ObjectMapper om = new ObjectMapper();
+
+    {
+        om.configure(JsonGenerator.Feature.WRITE_NUMBERS_AS_STRINGS, true);
+        om.configure(JsonGenerator.Feature.QUOTE_NON_NUMERIC_NUMBERS, true);
+        om.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        om.configure(DeserializationFeature.ACCEPT_EMPTY_ARRAY_AS_NULL_OBJECT, true);
+        om.configure(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT, true);
+    }
+
+
+    /**
 	 * start
 	 * 
 	 * @param flow
@@ -132,6 +151,7 @@ public class EasyFlowEngine {
 			claim.setNodeName(nextNode.getName());
 			claim.setNodeDescription(nextNode.getDescription());
 			claim.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
+			claim.setType(nextNode.getType());
 			nextClaim = claim;
 			this.claimRepo.save(claim);
 		} else {
@@ -150,7 +170,7 @@ public class EasyFlowEngine {
 		}
 		
 		if (taskInterceptor != null) {
-			taskInterceptor.afterTask(null, instance, context, nextTask, nextClaim);
+			taskInterceptor.afterTask(firstTask, instance, context, nextTask, nextClaim);
 		}
 
 		return instance;
@@ -159,7 +179,7 @@ public class EasyFlowEngine {
 	/**
 	 * 完成任务 使用gateway 来解决 驳回的场景 ，通过流程变量判断去掉上一个环节
 	 * 
-	 * @param task
+	 * @param taskId
 	 */
 	@Transactional(rollbackFor = { Exception.class }, propagation = Propagation.REQUIRED)
 	public EasyFlowInstance completeTask(String taskId, EasyFlowContext context) {
@@ -170,6 +190,10 @@ public class EasyFlowEngine {
 			throw new WorkflowException("节点已审批 请勿重复操作！");
 		}
 		EasyFlowInstance instance = this.instanceRepository.findOne(task.getInstanceId());
+
+		if(!instance.getStatus().equals(STATUS_RUNNING)){
+			throw  new WorkflowException("流程实例已停止");
+		}
 
 		if (taskInterceptor != null) {
 			taskInterceptor.beforeTask(task, instance, context);
@@ -198,6 +222,9 @@ public class EasyFlowEngine {
 			instance.setCurrentNode(nextNode.getName());
 			instance.setCurrentNodeDescription(nextNode.getDescription());
 			this.instanceRepository.save(instance);
+			if (taskInterceptor != null) {
+				taskInterceptor.afterTask(task, instance, context, null, null);
+			}
 			// end
 			return instance;
 		} else if (nextNode.getType().equals("event")) {
@@ -225,6 +252,13 @@ public class EasyFlowEngine {
 				claim.setNodeName(nextNode.getName());
 				claim.setNodeDescription(nextNode.getDescription());
 				claim.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
+                //如果是驳回记录到新的任务中
+                if(task.getApprovalStatus().equals(Byte.valueOf("0"))){
+                    if(claim.getVars() == null){
+                        claim.setVars(new HashMap<>());
+                    }
+                    claim.getVars().put(EF_VAR_LAST_REJECT,true);
+                }
 				claim.setType(nextNode.getType());
 				this.claimRepo.save(claim);
 				nextClaim = claim;
@@ -238,6 +272,13 @@ public class EasyFlowEngine {
 				newTask.setNodeName(nextNode.getName());
 				newTask.setNodeDescription(nextNode.getDescription());
 				newTask.setVars((Map<String, Object>) context.getFacts().get(EF_VARS));
+                //如果是驳回记录到新的任务中
+                if(task.getApprovalStatus().equals(Byte.valueOf("0"))){
+                    if(newTask.getVars() == null){
+                        newTask.setVars(new HashMap<>());
+                    }
+                    newTask.getVars().put(EF_VAR_LAST_REJECT,true);
+                }
 				newTask.setType(nextNode.getType());
 				this.taskRepository.save(newTask);
 				nextTask = newTask;
@@ -395,11 +436,58 @@ public class EasyFlowEngine {
 				taskListDto.setPublisher(String.valueOf(tuple[8]));
 				taskListDto.setCreateTime(String.valueOf(tuple[9]));
 				taskListDto.setBusinesskey(String.valueOf(tuple[10]));
+                Object var = tuple[11];
+                if(var!= null){
+                     Map<String,Object> varMap = null;
+                     try {
+                         varMap = om.readValue(String.valueOf(var), Map.class);
+                     } catch (IOException e) {
+                         throw new RuntimeException(e);
+                     }
+                     taskListDto.setVars(varMap);
+                }
 				result.add(taskListDto);
 			}
 		}
 
 		return result;
+	}
+
+
+	/**
+	 * 查询已办任务 分页
+	 * @param assignment
+	 * @param completeStart 完成开始时间
+	 * @Param completeEnd  完成结束时间
+	 * PageRequest pr = new PageRequest(page.getCurPage() - 1, page.getPerPageSum());
+	 * @Param pr
+	 */
+	@Transactional(readOnly = true)
+	public Page<EasyFlowTaskListDto> queryDoneTasksPaged(Integer assignment, Date completeStart , Date completeEnd,String flowName, String bizCode, Pageable pr  ){
+
+		List<EasyFlowTaskListDto> result = new ArrayList<EasyFlowTaskListDto>();
+
+
+			Page<Object[]> tasksTuple = this.taskRepository.findDonePaged(assignment,completeStart,completeEnd,flowName,bizCode,pr);
+
+				EasyFlowTaskListDto taskListDto = null;
+				for (Object[] tuple : tasksTuple.getContent()) {
+					taskListDto = new EasyFlowTaskListDto();
+					taskListDto.setId(String.valueOf(tuple[0]));
+					taskListDto.setInstanceId(String.valueOf(tuple[1]));
+					taskListDto.setIsDone((Byte) tuple[2]);
+					taskListDto.setNodeName(String.valueOf(tuple[3]));
+					taskListDto.setNodeDescription(String.valueOf(tuple[4]));
+					taskListDto.setFlowKey(String.valueOf(tuple[5]));
+					taskListDto.setFlowName(String.valueOf(tuple[6]));
+					taskListDto.setFormUrl(String.valueOf(tuple[7]));
+					taskListDto.setPublisher(String.valueOf(tuple[8]));
+					taskListDto.setCreateTime(String.valueOf(tuple[9]));
+					taskListDto.setBusinesskey(String.valueOf(tuple[10]));
+					result.add(taskListDto);
+				}
+
+		return new PageImpl<EasyFlowTaskListDto>(result,pr,tasksTuple.getTotalElements());
 	}
 
 	/**
@@ -439,6 +527,16 @@ public class EasyFlowEngine {
 				taskListDto.setCreateTime(String.valueOf(tuple[12]));
 				taskListDto.setBusinesskey(tuple[13].toString());
 				taskListDto.setAssignment(Integer.valueOf(tuple[14].toString()));
+                Object var = tuple[15];
+                if(var!= null){
+                    Map<String,Object> varMap = null;
+                    try {
+                        varMap = om.readValue(String.valueOf(var), Map.class);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                    taskListDto.setVars(varMap);
+                }
 				result.add(taskListDto);
 			}
 		}
@@ -594,6 +692,9 @@ public class EasyFlowEngine {
 		instance.setCurrentNode(lastNode.getName());
 		instance.setCurrentNodeDescription(lastNode.getDescription());
 		this.instanceRepository.save(instance);
+		if(taskInterceptor != null){
+			taskInterceptor.afterFlowFinished(instance,context);
+		}
 		return instance;
 	}
 
@@ -610,6 +711,7 @@ public class EasyFlowEngine {
 	@Transactional(rollbackFor = { Exception.class }, propagation = Propagation.REQUIRED)
 	public synchronized void claim(String taskId, Integer assignment) {
 		EasyFlowClaim old = this.claimRepo.findOne(taskId);
+		EasyFlowTask task = this.taskRepository.findOne(taskId);
 		EasyFlowInstance instance = this.instanceRepository.findOne(old.getInstanceId());
 		if (old.getStatus().equals(Byte.valueOf("1"))) {
 			throw new RuntimeException("任务已签收");
